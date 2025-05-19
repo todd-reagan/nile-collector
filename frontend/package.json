@@ -1,0 +1,41 @@
+{
+  "name": "nile-collector-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "next lint",
+    "export": "next build && next export"
+  },
+  "dependencies": {
+    "@aws-amplify/ui-react": "4.6.0",
+    "@emotion/react": "11.11.0",
+    "@emotion/styled": "11.11.0",
+    "@mui/icons-material": "5.11.16",
+    "@mui/material": "5.13.0",
+    "@mui/x-data-grid": "6.5.0",
+    "aws-amplify": "5.2.0",
+    "axios": "1.4.0",
+    "next": "13.4.4",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "swr": "2.1.5",
+    "uuid": "9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "18.16.0",
+    "@types/react": "18.2.6",
+    "@types/react-dom": "18.2.4",
+    "eslint": "8.56.0",
+    "eslint-config-next": "13.4.4",
+    "typescript": "5.0.4"
+  },
+  "overrides": {
+    "glob": "10.3.10",
+    "rimraf": "5.0.5",
+    "@humanwhocodes/object-schema": "2.0.3",
+    "@humanwhocodes/config-array": "0.11.14",
+    "uuid": "9.0.1"
+  }
+}

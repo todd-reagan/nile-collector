@@ -1,0 +1,90 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js
+.next/
+out/
+
+# Production
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+packaged.yaml
+
+# Misc
+.DS_Store
+*.pem
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env files
+.env*.local
+frontend/.env.development
+frontend/.env.production
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.sublime-workspace
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+
+# Deployment artifacts
+lambda_deploy.zip
+output.json
+temp_deploy/
+
+# Potentially sensitive files
+# Add any files here that might contain secrets, API keys, or other sensitive data.
+# Example:
+# secrets.json
+# credentials.yml
+# *.key
+# *.pem # Already present but good to keep in mind for this section
+update.sh

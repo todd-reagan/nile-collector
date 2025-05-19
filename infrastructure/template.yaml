@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Nile Collector - Serverless HTTP Event Collector (Splunk Target, API Gateway v2)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.9
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        EVENTS_TABLE: !Ref NileEventsTable # Changed back
+        CONFIG_TABLE: !Ref NileConfigTable
+        LOG_LEVEL: INFO
+        # ALLOW_ANYTHING is now a per-user setting in NileConfigTable
+        # SUMMARY_MODE is now a per-user setting in NileConfigTable
+        # SPLUNK_HEC_TOKEN is now read from DynamoDB NileConfigTable
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, test, prod)
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+Resources:
+  # DynamoDB Tables
+  NileEventsTable: # Changed back to original Logical ID with new schema
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub NileEvents-${Stage} # Physical name
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      AttributeDefinitions:
+        - AttributeName: user_id # New Primary Partition Key
+          AttributeType: S
+        - AttributeName: timestamp # New Primary Sort Key
+          AttributeType: N
+      KeySchema:
+        - AttributeName: user_id # New PK
+          KeyType: HASH
+        - AttributeName: timestamp # New SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes: [] # No GSIs for NileEventsTable
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  NileConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub NileConfig-${Stage}
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      AttributeDefinitions:
+        - AttributeName: user_id 
+          AttributeType: S
+        - AttributeName: splunk_hec_token 
+          AttributeType: S 
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: SplunkHecTokenIndex
+          KeySchema:
+            - AttributeName: splunk_hec_token
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL 
+          ProvisionedThroughput: 
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # Cognito User Pool
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub NileCollector-${Stage}
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub NileCollectorClient-${Stage}
+      GenerateSecret: false
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Sub https://${CloudFrontDistribution.DomainName}
+      LogoutURLs:
+        - !Sub https://${CloudFrontDistribution.DomainName}
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - phone
+        - email
+        - openid
+        - profile
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  # Lambda Functions
+  CollectEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/
+      Handler: collect_event.lambda_handler
+      Description: Lambda function for collecting events for Splunk
+      Policies:
+        - DynamoDBCrudPolicy: 
+            TableName: !Ref NileEventsTable # Changed back
+        - DynamoDBReadPolicy:
+            TableName: !Ref NileConfigTable
+      Events:
+        SplunkEventCollect:
+          Type: HttpApi
+          Properties:
+            Path: /services/collector/event 
+            Method: post
+            ApiId: !Ref NileApi
+        ApiHealth:
+          Type: HttpApi
+          Properties:
+            Path: /services/collector/health
+            Method: get
+            ApiId: !Ref NileApi
+
+  GetEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/
+      Handler: get_events.lambda_handler
+      Description: Lambda function for retrieving events
+      Policies: 
+        - DynamoDBCrudPolicy: # Policy for NileEventsTable re-added
+            TableName: !Ref NileEventsTable # Changed back
+      Events:
+        ApiGetEvents:
+          Type: HttpApi
+          Properties:
+            Path: /events 
+            Method: get
+            ApiId: !Ref NileApi
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ApiGetEvent: 
+          Type: HttpApi
+          Properties:
+            Path: /events/{event_id} 
+            Method: get
+            ApiId: !Ref NileApi
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  ManageConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/lambda/
+      Handler: manage_config.lambda_handler
+      Description: Lambda function for managing configuration
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NileConfigTable
+      Events:
+        ApiGetConfig:
+          Type: HttpApi
+          Properties:
+            Path: /config
+            Method: get
+            ApiId: !Ref NileApi
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ApiUpdateConfig:
+          Type: HttpApi
+          Properties:
+            Path: /config
+            Method: put
+            ApiId: !Ref NileApi
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ApiRegenerateSplunkHecToken: 
+          Type: HttpApi
+          Properties:
+            Path: /config/splunk-hec-token/regenerate
+            Method: post
+            ApiId: !Ref NileApi
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  NileApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*" 
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              audience:
+                - !Ref UserPoolClient
+            IdentitySource: "$request.header.Authorization"
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub nile-collector-frontend-${Stage}-${AWS::AccountId}
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub "OAI for Nile Collector Frontend ${Stage}"
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOAI.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOAI}
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: S3Origin
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway HTTP API endpoint URL
+    Value: !Ref NileApi 
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+
+  CloudFrontURL:
+    Description: CloudFront Distribution URL
+    Value: !Sub https://${CloudFrontDistribution.DomainName}
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+
+  FrontendBucketName:
+    Description: S3 Bucket Name for Frontend
+    Value: !Ref FrontendBucket
+
+  EventsTableName: 
+    Description: DynamoDB Events Table Name
+    Value: !Ref NileEventsTable # Changed back
+
+  ConfigTableName:
+    Description: DynamoDB Config Table Name
+    Value: !Ref NileConfigTable
+
+  CollectEventFunctionName:
+    Description: Collect Event Lambda Function Name
+    Value: !Ref CollectEventFunction
