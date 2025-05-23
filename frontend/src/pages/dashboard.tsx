@@ -21,6 +21,7 @@ import {
   InputLabel,
   Grid, // For layout
   SelectChangeEvent,
+  TablePagination,
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -78,8 +79,15 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, authIsLoading, router]);
 
+  // State for pagination
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [hasMoreEvents, setHasMoreEvents] = useState(true);
+  const eventsPerPage = 10;
+  const maxPages = 5;
+
   // Memoized fetchEvents function
-  const fetchEvents = useCallback(async (isManualOrAutoRefresh = false) => {
+  const fetchEvents = useCallback(async (isManualOrAutoRefresh = false, page = 0) => {
     if (!isAuthenticated) return;
 
     if (isManualOrAutoRefresh) {
@@ -90,8 +98,29 @@ export default function Dashboard() {
     setError('');
 
     try {
-      const data = await apiService.getEvents();
-      setEvents(data.events || []);
+      // Calculate the limit based on how many pages we want to fetch
+      // We fetch eventsPerPage * maxPages events to have data for all pages
+      const limit = eventsPerPage * maxPages;
+      
+      // Set a longer time range to fetch events from (e.g., 30 days ago)
+      const now = Math.floor(Date.now() / 1000); // Current time in seconds
+      const thirtyDaysAgo = now - (30 * 24 * 60 * 60); // 30 days ago in seconds
+      
+      const data = await apiService.getEvents({ 
+        limit,
+        start_time: thirtyDaysAgo,
+        end_time: now
+      });
+      
+      const fetchedEvents = data.events || [];
+      setEvents(fetchedEvents);
+      setTotalEvents(fetchedEvents.length);
+      setHasMoreEvents(fetchedEvents.length >= limit);
+      
+      // Reset to first page when refreshing
+      if (isManualOrAutoRefresh) {
+        setCurrentPage(0);
+      }
     } catch (err: any) {
       console.error('Error fetching events:', err);
       setError(err.response?.data?.message || 'Failed to load events. Please try again later.');
@@ -214,7 +243,26 @@ export default function Dashboard() {
             ) : events.length === 0 && !error ? (
                 <Typography sx={{mt: 2}}>No events found.</Typography>
             ) : !error ? (
-              <EventTable events={events} />
+              <>
+                <EventTable 
+                  events={events.slice(currentPage * eventsPerPage, (currentPage + 1) * eventsPerPage)} 
+                />
+                {events.length > eventsPerPage && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <TablePagination
+                      component="div"
+                      count={totalEvents}
+                      page={currentPage}
+                      onPageChange={(event: React.MouseEvent<HTMLButtonElement> | null, newPage: number) => setCurrentPage(newPage)}
+                      rowsPerPage={eventsPerPage}
+                      rowsPerPageOptions={[eventsPerPage]}
+                      labelDisplayedRows={({ from, to, count }: { from: number; to: number; count: number }) => 
+                        `${from}-${to} of ${count}${hasMoreEvents ? '+' : ''}`
+                      }
+                    />
+                  </Box>
+                )}
+              </>
             ) : null}
           </TabPanel>
 

@@ -8,7 +8,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
   Chip,
   IconButton,
   Dialog,
@@ -34,19 +33,8 @@ interface EventTableProps {
 }
 
 export default function EventTable({ events }: EventTableProps) {
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
 
   const handleViewDetails = (event: Event) => {
     setSelectedEvent(event);
@@ -97,9 +85,7 @@ export default function EventTable({ events }: EventTableProps) {
                 </TableCell>
               </TableRow>
             ) : (
-              events
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map((event) => (
+              events.map((event) => (
                   <TableRow 
                     key={event.id} 
                     hover 
@@ -133,15 +119,6 @@ export default function EventTable({ events }: EventTableProps) {
           </TableBody>
         </Table>
       </TableContainer>
-      <TablePagination
-        rowsPerPageOptions={[5, 10, 25]}
-        component="div"
-        count={events.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
 
       {/* Event Details Dialog */}
       <Dialog
