@@ -89,7 +89,7 @@ def get_config():
             # Ensure Splunk fields exist if loading an older config
             item = response['Item']
             # item.setdefault('splunk_hec_url', "") # No longer storing splunk_hec_url per user
-            item.setdefault('splunk_hec_token', "")
+            # Don't set empty string for splunk_hec_token as it's a GSI key
             item.pop('splunk_hec_url', None) # Remove if it exists from older versions
             # Remove old LM fields if they exist from a previous config
             item.pop('lm_access_id', None)
@@ -100,7 +100,7 @@ def get_config():
             default_config = {
                 'user_id': user_id,
                 # 'token': str(uuid.uuid4()), # Removed User API Token
-                'splunk_hec_token': "",     # Default to empty for Splunk HEC Token
+                # Don't include splunk_hec_token initially - it can't be an empty string in GSI
                 'allow_anything': False,
                 'summary_mode': False,
                 # 'event_types': [], # Removed user-specific event type config
@@ -171,7 +171,7 @@ def update_config():
         if not item_to_save:
             item_to_save['user_id'] = user_id
             item_to_save['created_at'] = datetime.utcnow().isoformat()
-            item_to_save.setdefault('splunk_hec_token', "") # Initialize if new
+            # Don't initialize splunk_hec_token with empty string - it's a GSI key
 
         item_to_save['updated_at'] = datetime.utcnow().isoformat()
 
@@ -187,8 +187,9 @@ def update_config():
         item_to_save.pop('lm_access_id', None)
         item_to_save.pop('lm_access_key', None)
 
-        # Ensure splunk_hec_token is at least an empty string if not set
-        item_to_save.setdefault('splunk_hec_token', "")
+        # Remove splunk_hec_token if it's an empty string to avoid GSI validation errors
+        if 'splunk_hec_token' in item_to_save and item_to_save['splunk_hec_token'] == "":
+            item_to_save.pop('splunk_hec_token')
         
         logger.info(f"Saving updated configuration for user {user_id} (settings only): {item_to_save}")
         table.put_item(Item=item_to_save)
