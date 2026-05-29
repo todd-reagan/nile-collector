@@ -9,19 +9,19 @@
     "export": "next build && next export"
   },
   "dependencies": {
-    "@aws-amplify/ui-react": "4.6.0",
+    "@aws-amplify/ui-react": "6.15.4",
     "@emotion/react": "11.11.0",
     "@emotion/styled": "11.11.0",
     "@mui/icons-material": "5.11.16",
     "@mui/material": "5.13.0",
     "@mui/x-data-grid": "6.5.0",
-    "aws-amplify": "5.2.0",
-    "axios": "1.4.0",
-    "next": "13.4.4",
+    "aws-amplify": "6.17.0",
+    "axios": "1.16.0",
+    "next": "15.5.18",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "swr": "2.1.5",
-    "uuid": "9.0.1"
+    "uuid": "14.0.0"
   },
   "devDependencies": {
     "@types/node": "18.16.0",
@@ -36,6 +36,6 @@
     "rimraf": "5.0.5",
     "@humanwhocodes/object-schema": "2.0.3",
     "@humanwhocodes/config-array": "0.11.14",
-    "uuid": "9.0.1"
+    "uuid": "14.0.0"
   }
 }
